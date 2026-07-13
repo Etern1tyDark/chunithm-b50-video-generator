@@ -12,7 +12,7 @@ The bundled Windows runtime in releases contains the Python packages b50-gen nee
 | macOS | `brew install ffmpeg` and `python3 -m pip install -r requirements.txt` | `python3 b50.py health` |
 | Linux | `sudo apt install ffmpeg` and `python3 -m pip install -r requirements.txt` | `python3 b50.py health` |
 
-The local `tools/ffmpeg.exe` is used on Windows. On macOS and Linux, b50-gen uses `ffmpeg` from `PATH`.
+The local `tools/ffmpeg.exe` is used on Windows. Note that when cloning this is zipped due to size limits. On macOS and Linux, b50-gen uses `ffmpeg` from `PATH`.
 
 For the rest of this README, use either launcher:
 
@@ -22,6 +22,10 @@ macOS/Linux:  python3 b50.py
 ```
 
 For example, `$B50 cards -h` below means either launcher followed by `cards -h`.
+
+## Data Retrieval
+
+https://reiwa.f5.si/ can be used to get a JSON file of your data and then you can just put it as `user/data.json`.
 
 ## Commands
 
