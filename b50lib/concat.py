@@ -73,9 +73,15 @@ def choose_encoder(requested: str = "auto") -> tuple[str, str]:
     return "libx264", "CPU software"
 
 
-def _duration(path: Path, ffmpeg: str) -> float:
+def media_duration(path: Path, ffmpeg: str) -> float:
     """Read duration without requiring a separately bundled ffprobe binary."""
-    result = subprocess.run([ffmpeg, "-hide_banner", "-i", str(path)], capture_output=True, text=True)
+    result = subprocess.run(
+        [ffmpeg, "-hide_banner", "-i", str(path)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", result.stderr)
     if not match:
         raise ValueError(f"Could not read the duration of {path.name}")
@@ -110,7 +116,7 @@ def _xfade_concat(clips: Sequence[Path], output: Path, ffmpeg: str, transition: 
     """Concatenate clips with video and audio crossfades, as mai-gen does."""
     if duration <= 0:
         raise ValueError("Transition duration must be greater than zero")
-    durations = [_duration(clip, ffmpeg) for clip in clips]
+    durations = [media_duration(clip, ffmpeg) for clip in clips]
     if any(item <= duration for item in durations):
         raise ValueError("Every clip must be longer than the transition duration")
     command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "warning"]

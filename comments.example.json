@@ -2,12 +2,12 @@
   "2892": {
     "comment": "A song-id entry overrides the matching Best/New entry.",
     "clip_start": 20,
-    "clip_duration": 15
+    "clip_end": 35
   },
   "best:2": {
     "comment": "This targets the second OLD card.",
     "clip_start": 35,
-    "clip_duration": 12
+    "clip_end": 47
   },
   "new:1": {
     "comment": "This targets the first NEW card."

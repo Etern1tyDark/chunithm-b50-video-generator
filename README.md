@@ -4,6 +4,15 @@ Inspiration: https://github.com/Nick-bit233/mai-gen-videob50/
 
 ## Install and launch
 
+**Quick Start**
+
+```bash
+git clone https://github.com/Etern1tyDark/chunithm-b50-video-generator.git
+cd chunithm-b50-video-generator
+
+# Go to "Releases" tab and get runtime.zip, unzip and put it in chunithm-b50-video-generator/.
+```
+
 The bundled Windows runtime in releases contains the Python packages b50-gen needs. On macOS and Linux, install the dependencies and FFmpeg with your normal package manager.
 
 | Platform | One-time setup | Command |
@@ -32,6 +41,7 @@ https://reiwa.f5.si/ can be used to get a JSON file of your data and then you ca
 ```text
 $B50 videos <search|download|all> [options]
 $B50 cards <jackets|render|clips|concat|video|all> [options]
+$B50 comments init [options]
 $B50 metadata <fetch|check> [options]
 $B50 health
 ```
@@ -92,7 +102,7 @@ $B50 cards render --frame-time 35
 Render the B50-order clips over their matching cards:
 
 ```text
-$B50 cards clips --clip-start 20 --clip-duration 15
+$B50 cards clips --clip-start 20 --clip-end 35
 ```
 
 Clips are written to `clips`. Add `--force` to regenerate an existing clip.
@@ -108,7 +118,7 @@ $B50 cards concat --final-output b50_full.mp4
 `video` runs the clip-rendering phase and then concatenates the result:
 
 ```text
-$B50 cards video --clip-start 20 --clip-duration 15 --final-output b50_full.mp4
+$B50 cards video --clip-start 20 --clip-end 35 --final-output b50_full.mp4
 ```
 
 Fade and the other FFmpeg crossfades re-encode the final video. `--encoder auto` detects NVIDIA NVENC, AMD AMF, Intel Quick Sync, or macOS VideoToolbox, then falls back to CPU x264. Audio crossfades match the video transition.
@@ -137,7 +147,15 @@ $B50 metadata fetch --output data/chuni_fusion_data.new.json
 
 ## Commentary
 
-Copy `comments.example.json` to `comments.json` and edit the text. Entries can be plain strings or objects with `comment`, `clip_start`, and `clip_duration`. Notes can have paragraph breaks and can be keyed by a song id (for example, `"2892"`) or by `"best:2"` / `"new:1"`; a song-id note wins.
+Generate a timing-ready template from the current B50 export:
+
+```text
+$B50 comments init
+```
+
+It reads every matching file in `downloads` and creates one entry per Best and New chart with a blank `comment`, `clip_start: 0`, and a `clip_end` equal to that video's duration. Existing files are protected; use `--force` to regenerate after downloading or replacing videos. The compact `comments.example.json` stays as a reference for the two supported entry styles.
+
+Entries can be plain strings or objects with `comment`, `clip_start`, and `clip_end`. Notes can have paragraph breaks and can be keyed by a song id (for example, `"2892"`) or by `"best:2"` / `"new:1"`; a song-id note wins.
 
 ## Project layout
 

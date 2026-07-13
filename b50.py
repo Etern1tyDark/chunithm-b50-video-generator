@@ -4,6 +4,7 @@
 Examples:
     python b50.py videos search --limit 1
     python b50.py cards render --frame-time 35
+    python b50.py comments init
     python b50.py health
 """
 from __future__ import annotations
@@ -41,7 +42,7 @@ def health() -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Standalone CHUNITHM B50 video and card generator.")
-    parser.add_argument("component", choices=("videos", "cards", "metadata", "health"), help="Workflow to run")
+    parser.add_argument("component", choices=("videos", "cards", "comments", "metadata", "health"), help="Workflow to run")
     parser.add_argument("args", nargs=argparse.REMAINDER, help="Arguments for the selected workflow")
     args = parser.parse_args(argv)
 
@@ -59,6 +60,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.component == "cards":
         from render_b50_cards import main as cards_main
         cards_main(args.args)
+    elif args.component == "comments":
+        from b50lib.comments import main as comments_main
+        comments_main(args.args)
     else:
         from b50lib.metadata import main as metadata_main
         metadata_main(args.args)

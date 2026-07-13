@@ -272,18 +272,18 @@ def render_video_clip(chart: dict[str, Any], number: int, card: Path, videos: Pa
 
 
 def render_clips(charts: list[dict[str, Any]], comments: dict[str, dict[str, Any]], output: Path,
-                 videos: Path, clips: Path, start: float, duration: float, force: bool) -> None:
+                 videos: Path, clips: Path, start: float, end: float, force: bool) -> None:
     """Render every chart clip in B50 order before final-video assembly."""
     counts = {"best": 0, "new": 0}
     for number, chart in enumerate(charts, 1):
         counts[chart["group"]] += 1
         config = card_config(comments, chart, counts[chart["group"]])
         clip_start = float(config.get("clip_start", start))
-        clip_duration = float(config.get("clip_duration", duration))
-        if clip_start < 0 or clip_duration <= 0:
-            raise ValueError(f"Invalid clip timing for {chart['title']}: start >= 0 and duration > 0 are required")
+        clip_end = float(config.get("clip_end", end))
+        if clip_start < 0 or clip_end <= clip_start:
+            raise ValueError(f"Invalid clip timing for {chart['title']}: end must be greater than a non-negative start")
         card = output / f"{number:02}_{chart['group']}_{chart['idx']}.jpg"
-        render_video_clip(chart, number, card, videos, clips, clip_start, clip_duration, force)
+        render_video_clip(chart, number, card, videos, clips, clip_start, clip_end - clip_start, force)
 
 
 def concat_clips(charts: list[dict[str, Any]], clips: Path, final_output: Path, transition: str,
@@ -391,7 +391,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--clips", type=Path, default=ROOT / "clips", help="Rendered chart-video cards")
     parser.add_argument("--comments", type=Path, default=ROOT / "comments.json", help="Optional notes keyed by id or best:1/new:1"); parser.add_argument("--frame-time", type=float, default=20, help="Preview timestamp in seconds")
     parser.add_argument("--clip-start", type=float, default=20, help="Seconds into the chart video when a clip starts")
-    parser.add_argument("--clip-duration", type=float, default=15, help="Length in seconds of each rendered clip")
+    parser.add_argument("--clip-end", type=float, default=35, help="Seconds into the chart video when a clip ends")
     parser.add_argument("--final-output", type=Path, default=ROOT / "b50_full.mp4", help="Assembled B50 video path")
     parser.add_argument("--transition", choices=("none", "fade", "wipeleft", "slideright", "circleopen", "dissolve"), default="fade", help="FFmpeg xfade transition between clips (default: fade)")
     parser.add_argument("--transition-duration", type=float, default=1, help="Transition duration in seconds")
@@ -414,7 +414,7 @@ def main(argv: list[str] | None = None) -> None:
             render_card(chart, number, counts[chart["group"]], metadata, args.jackets, args.videos, comments, args.frame_time, args.output / filename)
             print(f"[{number:02}] Rendered: {filename}")
     if args.command in ("clips", "video"):
-        render_clips(charts, comments, args.output, args.videos, args.clips, args.clip_start, args.clip_duration, args.force)
+        render_clips(charts, comments, args.output, args.videos, args.clips, args.clip_start, args.clip_end, args.force)
     if args.command in ("concat", "video"):
         concat_clips(charts, args.clips, args.final_output, args.transition, args.transition_duration,
                      args.encoder, args.bitrate, args.fps, args.normalize_audio, args.allow_missing,
