@@ -1,0 +1,37 @@
+# Python bytecode, tests, and local environments
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+runtime/
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Per-user configuration and transient search results
+comments.json
+matches.json
+
+# Generated B50 assets and final videos
+cards/
+clips/
+downloads/
+jackets/
+/*.mp4
+/*.ts
+
+# Keep the repository's renderer data, including data/chuni_fusion_data.json,
+# under version control. Do not add a blanket *.json ignore rule.
+
+# ffmpeg
+tools/ffmpeg.exe
