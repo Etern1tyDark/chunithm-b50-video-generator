@@ -17,20 +17,25 @@ def downloaded_video(chart: dict, videos: Path) -> Path | None:
     return matches[0] if matches else None
 
 
-def comment_template(charts: Sequence[dict], videos: Path, ffmpeg: str) -> dict[str, dict[str, float | str]]:
+def comment_template(charts: Sequence[dict], videos: Path, ffmpeg: str) -> dict[str, dict[str, float | int | str]]:
     """Return blank comments with a 0-to-video-duration interval for every chart."""
-    grouped = {group: [chart for chart in charts if chart["group"] == group] for group in ("best", "new")}
+    grouped = {
+        group: sorted((chart for chart in charts if chart["group"] == group), key=lambda chart: chart["group_number"])
+        for group in ("best", "new")
+    }
     missing = [chart["title"] for group in grouped.values() for chart in group if not downloaded_video(chart, videos)]
     if missing:
         raise FileNotFoundError(f"Missing {len(missing)} chart download(s): {', '.join(missing)}")
     return {
-        f"{group}:{number}": {
+        f"{group}:{chart['group_number']}": {
             "comment": "",
             "clip_start": 0,
             "clip_end": media_duration(downloaded_video(chart, videos), ffmpeg),
+            "recommendation": 0,
+            "pc": 0,
         }
         for group in ("best", "new")
-        for number, chart in enumerate(grouped[group], 1)
+        for chart in grouped[group]
     }
 
 

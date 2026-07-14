@@ -23,6 +23,9 @@ def ordered_clips(clips_dir: Path, charts: Sequence[dict], allow_missing: bool =
     clips, missing = [], []
     for number, chart in enumerate(charts, 1):
         clip = clips_dir / f"{number:02}_{chart['group']}_{chart['idx']}.mp4"
+        if not clip.exists() or clip.stat().st_size == 0:
+            legacy = sorted(clips_dir.glob(f"*_{chart['group']}_{chart['idx']}.mp4"))
+            clip = legacy[0] if legacy else clip
         if clip.exists() and clip.stat().st_size > 0:
             clips.append(clip)
         else:

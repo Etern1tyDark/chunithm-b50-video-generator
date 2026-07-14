@@ -2,7 +2,9 @@
   "2892": {
     "comment": "A song-id entry overrides the matching Best/New entry.",
     "clip_start": 20,
-    "clip_end": 35
+    "clip_end": 35,
+    "recommendation": 8,
+    "pc": 42
   },
   "best:2": {
     "comment": "This targets the second OLD card.",

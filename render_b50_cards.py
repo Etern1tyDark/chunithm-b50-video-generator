@@ -119,6 +119,49 @@ def multiline_text(draw: ImageDraw.ImageDraw, value: str, box: tuple[int, int, i
         y += size + 12
 
 
+def recommendation_value(config: dict[str, Any]) -> int:
+    """Read the 0–10 recommendation score used by the five-star display."""
+    raw = config.get("recommendation", 0)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as error:
+        raise ValueError("recommendation must be a whole number from 0 to 10") from error
+    if str(raw).strip() not in (str(value), f"{value}.0") or not 0 <= value <= 10:
+        raise ValueError("recommendation must be a whole number from 0 to 10")
+    return value
+
+
+def playcount_value(config: dict[str, Any]) -> str:
+    """Format the optional pc value as a compact, readable play count."""
+    raw = config.get("pc", 0)
+    try:
+        value = int(str(raw).replace(",", ""))
+    except (TypeError, ValueError) as error:
+        raise ValueError("pc must be a non-negative whole number") from error
+    if value < 0:
+        raise ValueError("pc must be a non-negative whole number")
+    return f"{value:,}"
+
+
+def draw_recommendation_stars(canvas: Image.Image, draw: ImageDraw.ImageDraw, x: int, y: int, value: int) -> ImageDraw.ImageDraw:
+    """Draw five outline stars, filling full or half stars from a 0–10 score."""
+    star_font = ImageFont.truetype(str(FONTS / "SOURCEHANSANSSC-BOLD.OTF"), 31)
+    advance, full_stars, has_half = 34, value // 2, value % 2
+    outline, filled = (186, 197, 226, 255), (255, 208, 77, 255)
+    for index in range(5):
+        left = x + index * advance
+        draw.text((left, y), "☆", font=star_font, fill=outline)
+        if index < full_stars:
+            draw.text((left, y), "★", font=star_font, fill=filled)
+        elif index == full_stars and has_half:
+            # Pillow does not provide font fallback for U+2BEA (half star).
+            # Clip a filled black-star glyph over its white-star outline instead.
+            glyph = Image.new("RGBA", (advance, 42))
+            ImageDraw.Draw(glyph).text((0, 0), "★", font=star_font, fill=filled)
+            canvas.alpha_composite(glyph.crop((0, 0, advance // 2, glyph.height)), (left, y))
+    return ImageDraw.Draw(canvas)
+
+
 def wrapped_lines(draw: ImageDraw.ImageDraw, value: str, font: ImageFont.FreeTypeFont, width: int) -> list[str]:
     """Wrap on words where possible; use character wrapping only for CJK/no-space text."""
     if draw.textlength(value, font=font) <= width:
@@ -139,31 +182,22 @@ def wrapped_lines(draw: ImageDraw.ImageDraw, value: str, font: ImageFont.FreeTyp
 
 
 def wrapped_text(draw: ImageDraw.ImageDraw, value: str, box: tuple[int, int, int, int], font_path: Path,
-                 preferred_size: int, minimum_size: int, color: tuple[int, int, int, int], max_lines: int) -> None:
-    """Prefer a readable single line; wrap only when shrinking is no longer enough."""
-    available_width = box[2] - box[0]
-    # A title such as Kaleidoscope should become a slightly smaller one-liner,
-    # not an awkward two-line word fragment.
-    for size in range(preferred_size, minimum_size - 1, -1):
+                 preferred_size: int, minimum_size: int, color: tuple[int, int, int, int], max_lines: int) -> tuple[int, int]:
+    """Prefer readable wrapping at the intended size before shrinking text."""
+    available_width, available_height = box[2] - box[0], box[3] - box[1]
+    largest_size = min(preferred_size, max(minimum_size, available_height // max_lines - 2))
+    for size in range(largest_size, minimum_size - 1, -1):
         font = ImageFont.truetype(str(font_path), size)
-        if draw.textlength(value, font=font) <= available_width:
-            lines = [value]
+        lines = wrapped_lines(draw, value, font, available_width)
+        if len(lines) <= max_lines:
             break
     else:
-        # A two-line block must also fit vertically; otherwise the second line
-        # collides with the artist/constant rows below it.
-        wrapped_max_size = min(preferred_size, max(minimum_size, (box[3] - box[1]) // max_lines - 3))
-        for size in range(wrapped_max_size, minimum_size - 1, -1):
-            font = ImageFont.truetype(str(font_path), size)
-            lines = wrapped_lines(draw, value, font, available_width)
-            if len(lines) <= max_lines:
-                break
-        else:
-            lines = lines[:max_lines]
-            lines[-1] = lines[-1].rstrip(" .") + "…"
-    line_height = min(size + 2, max(1, (box[3] - box[1]) // max_lines))
+        lines = lines[:max_lines]
+        lines[-1] = lines[-1].rstrip(" .") + "…"
+    line_height = min(size + 2, max(1, available_height // max_lines))
     for index, line in enumerate(lines[:max_lines]):
         draw.text((box[0], box[1] + index * line_height), line, font=font, fill=color)
+    return len(lines[:max_lines]), line_height
 
 
 def number_sprite(value: str, folder: Path, height: int, tracking: int = -3) -> Image.Image:
@@ -216,7 +250,12 @@ def ffmpeg_path() -> str | None:
 
 def video_path(chart: dict[str, Any], number: int, videos: Path) -> Path | None:
     found = sorted(videos.glob(f"{number:02}_{chart['group']}_{chart['difficulty']}_{chart['idx']}_*.mp4"))
-    return found[0] if found else None
+    if found:
+        return found[0]
+    # Older downloads use the pre-New→Best global number. The identifying
+    # group, difficulty, and song id remain stable, so retain those files.
+    legacy = sorted(videos.glob(f"*_{chart['group']}_{chart['difficulty']}_{chart['idx']}_*.mp4"))
+    return legacy[0] if legacy else None
 
 
 def chart_frame(video: Path | None, timestamp: float, size: tuple[int, int]) -> Image.Image | None:
@@ -274,10 +313,8 @@ def render_video_clip(chart: dict[str, Any], number: int, card: Path, videos: Pa
 def render_clips(charts: list[dict[str, Any]], comments: dict[str, dict[str, Any]], output: Path,
                  videos: Path, clips: Path, start: float, end: float, force: bool) -> None:
     """Render every chart clip in B50 order before final-video assembly."""
-    counts = {"best": 0, "new": 0}
     for number, chart in enumerate(charts, 1):
-        counts[chart["group"]] += 1
-        config = card_config(comments, chart, counts[chart["group"]])
+        config = card_config(comments, chart, int(chart["group_number"]))
         clip_start = float(config.get("clip_start", start))
         clip_end = float(config.get("clip_end", end))
         if clip_start < 0 or clip_end <= clip_start:
@@ -332,10 +369,19 @@ def render_card(chart: dict[str, Any], number: int, group_number: int, metadata:
     draw.rounded_rectangle((1325, 62, 1854, 128), radius=18, fill=accent)
     label = f"OLD - Best {group_number:02}" if chart["group"] == "best" else f"NEW - Best {group_number:02}"
     text(draw, label, (1349, 77, 1830, 116), font, 32, (255, 255, 255, 255))
-    comment = str(card_config(comments, chart, group_number).get("comment", ""))
-    text(draw, "COMMENTARY", (1351, 164, 1828, 202), font, 27, (163, 177, 215, 255))
-    draw.line((1349, 216, 1830, 216), fill=(255, 255, 255, 30), width=2)
-    multiline_text(draw, comment or "No commentary yet.\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.", (1349, 244, 1830, 758), title_font, 29, (239, 242, 255, 255))
+    config = card_config(comments, chart, group_number)
+    recommendation, playcount = recommendation_value(config), playcount_value(config)
+    recommendation_box, playcount_box = (1349, 148, 1592, 228), (1602, 148, 1830, 228)
+    for box in (recommendation_box, playcount_box):
+        draw.rounded_rectangle(box, radius=12, fill=(34, 42, 70, 255), outline=(255, 255, 255, 24), width=1)
+    text(draw, "RECOMMENDATION", (1363, 156, 1578, 177), font, 16, (163, 177, 215, 255))
+    text(draw, "PLAY COUNT", (1616, 156, 1816, 177), font, 16, (163, 177, 215, 255))
+    draw = draw_recommendation_stars(canvas, draw, 1362, 174, recommendation)
+    text(draw, playcount, (1616, 185, 1816, 212), font, 31, (255, 255, 255, 255))
+    comment = str(config.get("comment", ""))
+    text(draw, "COMMENTARY", (1351, 243, 1828, 273), font, 23, (163, 177, 215, 255))
+    draw.line((1349, 284, 1830, 284), fill=(255, 255, 255, 30), width=2)
+    multiline_text(draw, comment or "No commentary yet.\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.", (1349, 305, 1830, 758), title_font, 24, (239, 242, 255, 255))
 
     draw.rounded_rectangle((66, 820, 1854, 1018), radius=18, fill=(244, 247, 255, 255))
     canvas.alpha_composite(fit(jacket, (166, 166)), (90, 836)); draw.rounded_rectangle((90, 836, 256, 1002), radius=12, outline=accent, width=6)
@@ -358,8 +404,16 @@ def render_card(chart: dict[str, Any], number: int, group_number: int, metadata:
     else:
         draw.text(((level_box[0] + level_box[2]) // 2, 938), level, font=level_font, fill=(255, 255, 255, 255), anchor="mm")
     # Keep metadata in its own lower block; score/rating coordinates stay independent.
-    wrapped_text(draw, chart["title"], (info_box[0], 836, info_box[2], 890), title_font, 42, 20, (22, 27, 58, 255), 2)
-    wrapped_text(draw, metadata.get(chart["idx"], {}).get("artist", "Unknown artist"), (info_box[0], 895, info_box[2], 953), title_font, 25, 16, (71, 78, 106, 255), 2)
+    title_top = 844
+    title_lines, title_line_height = wrapped_text(
+        draw, chart["title"], (info_box[0], title_top, info_box[2], 927), title_font, 42, 20, (22, 27, 58, 255), 2
+    )
+    artist_top = title_top + title_lines * title_line_height + 7
+    artist_lines = 2 if artist_top <= 910 else 1
+    wrapped_text(
+        draw, metadata.get(chart["idx"], {}).get("artist", "Unknown artist"),
+        (info_box[0], artist_top, info_box[2], 966), title_font, 25, 16, (71, 78, 106, 255), artist_lines,
+    )
     # Keep this as the last baseline in the information cell, even for a long title/artist.
     text(draw, f"CONSTANT {constant:.1f}" if constant else "CONSTANT —", (info_box[0], 975, info_box[2], 1003), font, 22, (71, 78, 106, 255))
     # Centre each label-and-value group, not just its numeral, in the bottom strip.
@@ -408,10 +462,9 @@ def main(argv: list[str] | None = None) -> None:
     if args.limit is not None: charts = charts[:args.limit]
     if args.command in ("jackets", "all"): fetch_jackets(charts, metadata, args.jackets, args.delay)
     if args.command in ("render", "all"):
-        counts = {"best": 0, "new": 0}
         for number, chart in enumerate(charts, 1):
-            counts[chart["group"]] += 1; filename = f"{number:02}_{chart['group']}_{chart['idx']}.jpg"
-            render_card(chart, number, counts[chart["group"]], metadata, args.jackets, args.videos, comments, args.frame_time, args.output / filename)
+            filename = f"{number:02}_{chart['group']}_{chart['idx']}.jpg"
+            render_card(chart, number, int(chart["group_number"]), metadata, args.jackets, args.videos, comments, args.frame_time, args.output / filename)
             print(f"[{number:02}] Rendered: {filename}")
     if args.command in ("clips", "video"):
         render_clips(charts, comments, args.output, args.videos, args.clips, args.clip_start, args.clip_end, args.force)

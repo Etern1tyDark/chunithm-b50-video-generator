@@ -22,12 +22,18 @@ def decode_mojibake(value: str) -> str:
 
 
 def load_charts(path: Path) -> list[dict[str, Any]]:
-    """Load new charts first, then best charts, with a consistent group field."""
+    """Load New then Best, descending by each array's original rank."""
     source = json.loads(path.read_text(encoding="utf-8"))
     charts = [
-        {**chart, "title": decode_mojibake(str(chart["title"])), "group": group, "section": group}
+        {
+            **chart,
+            "title": decode_mojibake(str(chart["title"])),
+            "group": group,
+            "section": group,
+            "group_number": group_number,
+        }
         for group in ("new", "best")
-        for chart in source.get(group, [])
+        for group_number, chart in reversed(list(enumerate(source.get(group, []), 1)))
     ]
     if not charts:
         raise ValueError("No charts found. Expected 'best' and/or 'new' arrays.")
@@ -58,7 +64,8 @@ def load_comments(path: Path | None) -> dict[str, dict[str, Any]]:
 
 def card_config(configs: dict[str, dict[str, Any]], chart: dict[str, Any], group_number: int) -> dict[str, Any]:
     """Song-id settings override an OLD/NEW ordinal setting."""
-    return configs.get(str(chart["idx"]), configs.get(f"{chart['group']}:{group_number}", {}))
+    original_number = int(chart.get("group_number", group_number))
+    return configs.get(str(chart["idx"]), configs.get(f"{chart['group']}:{original_number}", {}))
 
 
 def jacket_path(chart: dict[str, Any], metadata: dict[int, dict[str, Any]], jackets: Path) -> Path | None:

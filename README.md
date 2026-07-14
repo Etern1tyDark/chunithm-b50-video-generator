@@ -109,7 +109,7 @@ Clips are written to `clips`. Add `--force` to regenerate an existing clip.
 
 ## Final B50 video
 
-`concat` orders B50 clips with New entries first and Best entries second. By default it uses a one-second fade between clips; use `--transition none` for the fast, lossless MPEG-TS remux and stream-copy path.
+`concat` orders clips as New 20 through New 1, then Best 30 through Best 1 (descending by the original B50 rank). By default it uses a one-second fade between clips; use `--transition none` for the fast, lossless MPEG-TS remux and stream-copy path.
 
 ```text
 $B50 cards concat --final-output b50_full.mp4
@@ -153,9 +153,9 @@ Generate a timing-ready template from the current B50 export:
 $B50 comments init
 ```
 
-It reads every matching file in `downloads` and creates one entry per Best and New chart with a blank `comment`, `clip_start: 0`, and a `clip_end` equal to that video's duration. Existing files are protected; use `--force` to regenerate after downloading or replacing videos. The compact `comments.example.json` stays as a reference for the two supported entry styles.
+It reads every matching file in `downloads` and creates one entry per Best and New chart with a blank `comment`, `clip_start: 0`, a `clip_end` equal to that video's duration, `recommendation: 0`, and `pc: 0`. Existing files are protected; use `--force` to regenerate after downloading or replacing videos. The compact `comments.example.json` stays as a reference for the two supported entry styles.
 
-Entries can be plain strings or objects with `comment`, `clip_start`, and `clip_end`. Notes can have paragraph breaks and can be keyed by a song id (for example, `"2892"`) or by `"best:2"` / `"new:1"`; a song-id note wins.
+Entries can be plain strings or objects with `comment`, `clip_start`, `clip_end`, `recommendation`, and `pc`. `recommendation` is a whole number from 0 to 10, rendered as five outline/filled stars with half stars for odd values; `pc` is a non-negative play count. Notes can have paragraph breaks and can be keyed by a song id (for example, `"2892"`) or by `"best:2"` / `"new:1"`; a song-id note wins.
 
 ## Project layout
 
