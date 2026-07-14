@@ -104890,7 +104890,7 @@
                 "level_cn": null,
                 "level_latest": "14+",
                 "level_value_cn": null,
-                "level_value_latest": 14.7,
+                "level_value_latest": 14.5,
                 "note_designer": "Clematis vs Mistilteinn",
                 "version": null,
                 "note_counts": {
@@ -105528,9 +105528,9 @@
             {
                 "difficulty": 3,
                 "level_cn": null,
-                "level_latest": "14+",
+                "level_latest": "14",
                 "level_value_cn": null,
-                "level_value_latest": 14.6,
+                "level_value_latest": 14.4,
                 "note_designer": "バカペンギン",
                 "version": null,
                 "note_counts": {
@@ -105722,7 +105722,7 @@
                 "level_cn": null,
                 "level_latest": "15",
                 "level_value_cn": null,
-                "level_value_latest": 15.0,
+                "level_value_latest": 15.1,
                 "note_designer": "みぞれヤナギ",
                 "version": null,
                 "note_counts": {
@@ -105912,9 +105912,9 @@
             {
                 "difficulty": 3,
                 "level_cn": null,
-                "level_latest": "14+",
+                "level_latest": "15",
                 "level_value_cn": null,
-                "level_value_latest": 14.9,
+                "level_value_latest": 15.0,
                 "note_designer": "Piercing Blade",
                 "version": null,
                 "note_counts": {

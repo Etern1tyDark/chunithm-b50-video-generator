@@ -20,7 +20,7 @@ from b50lib import data as b50_data
 enable_runtime_packages()
 
 import requests
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 CANVAS = (1920, 1080)
 # The stock 1311x780 frames have a 71px/50px border around a 1169x665
@@ -81,6 +81,15 @@ def fit(image_in: Image.Image, size: tuple[int, int]) -> Image.Image:
     scaled = image_in.resize((round(image_in.width * ratio), round(image_in.height * ratio)), Image.Resampling.LANCZOS)
     left, top = (scaled.width - size[0]) // 2, (scaled.height - size[1]) // 2
     return scaled.crop((left, top, left + size[0], top + size[1]))
+
+
+def rounded_fit(image_in: Image.Image, size: tuple[int, int], radius: int) -> Image.Image:
+    """Crop a jacket to the same rounded silhouette as its frame."""
+    thumbnail = fit(image_in, size)
+    mask = Image.new("L", size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, size[0] - 1, size[1] - 1), radius=radius, fill=255)
+    thumbnail.putalpha(ImageChops.multiply(thumbnail.getchannel("A"), mask))
+    return thumbnail
 
 
 def text(draw: ImageDraw.ImageDraw, value: str, box: tuple[int, int, int, int], font_path: Path, size: int, color: tuple[int, int, int, int], anchor: str = "la") -> None:
@@ -384,7 +393,7 @@ def render_card(chart: dict[str, Any], number: int, group_number: int, metadata:
     multiline_text(draw, comment or "No commentary yet.\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.", (1349, 305, 1830, 758), title_font, 24, (239, 242, 255, 255))
 
     draw.rounded_rectangle((66, 820, 1854, 1018), radius=18, fill=(244, 247, 255, 255))
-    canvas.alpha_composite(fit(jacket, (166, 166)), (90, 836)); draw.rounded_rectangle((90, 836, 256, 1002), radius=12, outline=accent, width=6)
+    canvas.alpha_composite(rounded_fit(jacket, (166, 166), 10), (90, 836)); draw.rounded_rectangle((90, 836, 256, 1002), radius=12, outline=accent, width=6)
     # Each value owns a fixed cell: this prevents wide score sprites from
     # entering the rating/status area and keeps every number optically centred.
     level_box, info_box = (282, 839, 420, 1005), (450, 838, 735, 1004)
