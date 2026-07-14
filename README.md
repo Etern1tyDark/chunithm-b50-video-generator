@@ -109,7 +109,7 @@ Clips are written to `clips`. Add `--force` to regenerate an existing clip.
 
 ## Final B50 video
 
-`concat` orders clips as New 20 through New 1, then Best 30 through Best 1 (descending by the original B50 rank). By default it uses a one-second fade between clips; use `--transition none` for the fast, lossless MPEG-TS remux and stream-copy path.
+`concat` orders clips as New 20 through New 1, then Best 30 through Best 1 (descending by the original B50 rank). By default it uses a one-second fade, assembled in bounded-memory batches of four clips; use `--transition none` for the fast, lossless MPEG-TS remux and stream-copy path.
 
 ```text
 $B50 cards concat --final-output b50_full.mp4

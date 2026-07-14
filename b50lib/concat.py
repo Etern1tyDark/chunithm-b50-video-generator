@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
@@ -114,20 +115,22 @@ def _stream_copy_concat(clips: Sequence[Path], output: Path, ffmpeg: str) -> Pat
     return output
 
 
-def _xfade_concat(clips: Sequence[Path], output: Path, ffmpeg: str, transition: str,
-                  duration: float, encoder: str, bitrate: str, fps: int) -> Path:
-    """Concatenate clips with video and audio crossfades, as mai-gen does."""
-    if duration <= 0:
-        raise ValueError("Transition duration must be greater than zero")
-    durations = [media_duration(clip, ffmpeg) for clip in clips]
-    if any(item <= duration for item in durations):
-        raise ValueError("Every clip must be longer than the transition duration")
-    command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "warning"]
-    for clip in clips:
-        command += ["-i", str(clip)]
+@dataclass(frozen=True)
+class _Segment:
+    path: Path
+    duration: float
+
+
+def _xfade_batch(segments: Sequence[_Segment], output: Path, ffmpeg: str, transition: str,
+                 duration: float, encoder: str, bitrate: str, fps: int) -> _Segment:
+    """Merge at most four ordered segments, keeping the FFmpeg graph small."""
+    command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "warning", "-threads", "0", "-filter_complex_threads", "0"]
+    for segment in segments:
+        command += ["-i", str(segment.path)]
 
     filters = []
-    for index, clip_duration in enumerate(durations):
+    for index, segment in enumerate(segments):
+        clip_duration = segment.duration
         filters.append(
             f"[{index}:v]setpts=PTS-STARTPTS,trim=duration={clip_duration:.6f},"
             f"fps={fps},format=yuv420p,settb=AVTB[v{index}]"
@@ -138,25 +141,65 @@ def _xfade_concat(clips: Sequence[Path], output: Path, ffmpeg: str, transition: 
             f"aformat=sample_fmts=fltp:channel_layouts=stereo[a{index}]"
         )
 
-    accumulated = durations[0]
-    for index in range(len(clips) - 1):
+    accumulated = segments[0].duration
+    for index in range(len(segments) - 1):
         left_video = "[v0]" if index == 0 else f"[vfade{index - 1}]"
         left_audio = "[a0]" if index == 0 else f"[afade{index - 1}]"
-        right_video, right_audio = f"[v{index + 1}]", f"[a{index + 1}]"
-        final = index == len(clips) - 2
+        final = index == len(segments) - 2
         video_out = "[vout]" if final else f"[vfade{index}]"
         audio_out = "[aout]" if final else f"[afade{index}]"
         offset = max(0.01, accumulated - duration)
         filters.append(
-            f"{left_video}{right_video}xfade=transition={transition}:duration={duration}:offset={offset:.6f}{video_out}"
+            f"{left_video}[v{index + 1}]xfade=transition={transition}:duration={duration}:offset={offset:.6f}{video_out}"
         )
-        filters.append(f"{left_audio}{right_audio}acrossfade=d={duration}:c1=tri:c2=tri{audio_out}")
-        accumulated = offset + durations[index + 1]
+        filters.append(f"{left_audio}[a{index + 1}]acrossfade=d={duration}:c1=tri:c2=tri{audio_out}")
+        accumulated = offset + segments[index + 1].duration
 
     command += ["-filter_complex", ";".join(filters), "-map", "[vout]", "-map", "[aout]"]
     command += _encoder_args(encoder, bitrate)
-    command += ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(output)]
+    command += ["-c:a", "aac", "-b:a", "192k", str(output)]
     subprocess.run(command, check=True)
+    return _Segment(output, accumulated)
+
+
+def _xfade_concat(clips: Sequence[Path], output: Path, ffmpeg: str, transition: str,
+                  duration: float, encoder: str, bitrate: str, fps: int) -> Path:
+    """Concatenate crossfades in bounded-memory batches of four clips."""
+    if duration <= 0:
+        raise ValueError("Transition duration must be greater than zero")
+    durations = [media_duration(clip, ffmpeg) for clip in clips]
+    if any(item <= duration for item in durations):
+        raise ValueError("Every clip must be longer than the transition duration")
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="b50-xfade-", dir=output.parent) as temporary:
+        temp = Path(temporary)
+        current = [_Segment(clip, clip_duration) for clip, clip_duration in zip(clips, durations)]
+        round_number = 1
+        while len(current) > 1:
+            next_round: list[_Segment] = []
+            batch_count = (len(current) + 3) // 4
+            print(f"Fade round {round_number}: {len(current)} segments -> {batch_count}.")
+            for offset in range(0, len(current), 4):
+                batch = current[offset:offset + 4]
+                if len(batch) == 1:
+                    next_round.append(batch[0])
+                    continue
+                batch_number = offset // 4 + 1
+                target = temp / f"round-{round_number:02}-{batch_number:02}.mp4"
+                print(f"  Merging batch {batch_number}/{batch_count} ({len(batch)} segments).")
+                next_round.append(_xfade_batch(batch, target, ffmpeg, transition, duration, encoder, bitrate, fps))
+            retained = {segment.path for segment in next_round}
+            for segment in current:
+                if segment.path.parent == temp and segment.path not in retained:
+                    segment.path.unlink(missing_ok=True)
+            current = next_round
+            round_number += 1
+
+        subprocess.run([
+            ffmpeg, "-y", "-hide_banner", "-loglevel", "warning", "-i", str(current[0].path),
+            "-c", "copy", "-movflags", "+faststart", str(output),
+        ], check=True)
     return output
 
 
