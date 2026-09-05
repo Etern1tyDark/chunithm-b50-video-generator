@@ -36,3 +36,5 @@ b50-xfade*/
 
 # ffmpeg
 tools/ffmpeg.exe
+
+archive/

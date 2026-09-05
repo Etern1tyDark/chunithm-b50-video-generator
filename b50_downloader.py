@@ -75,34 +75,78 @@ def queries(chart: dict[str, Any]) -> list[str]:
     ]
 
 
+def _parse_length_seconds(length_text: str) -> int | None:
+    """Convert a YouTube duration string like '2:43' or '1:02:15' to seconds."""
+    try:
+        parts = [int(p) for p in length_text.strip().split(":")]
+        if len(parts) == 2:
+            return parts[0] * 60 + parts[1]
+        if len(parts) == 3:
+            return parts[0] * 3600 + parts[1] * 60 + parts[2]
+    except (ValueError, AttributeError):
+        pass
+    return None
+
+
+def _extract_video_renderers(raw: dict[str, Any], results: list | None = None, depth: int = 0) -> list[dict[str, Any]]:
+    """Recursively extract videoRenderer dicts from the raw innertube search response."""
+    if results is None:
+        results = []
+    if depth > 15:
+        return results
+    if isinstance(raw, dict):
+        if "videoRenderer" in raw:
+            results.append(raw["videoRenderer"])
+            return results
+        for v in raw.values():
+            _extract_video_renderers(v, results, depth + 1)
+    elif isinstance(raw, list):
+        for item in raw:
+            _extract_video_renderers(item, results, depth + 1)
+    return results
+
+
 def search_chart(chart: dict[str, Any], results_per_query: int) -> list[dict[str, Any]]:
     seen: set[str] = set()
     candidates: list[dict[str, Any]] = []
     for query in queries(chart):
         try:
-            videos = Search(query).videos[:results_per_query]
+            s = Search(query)
+            # Trigger the raw innertube fetch without accessing YouTube object
+            # properties (which make individual bot-detectable requests per video).
+            s.fetch_query()
+            raw = s._initial_results or {}
+            renderers = _extract_video_renderers(raw)[:results_per_query]
         except Exception as error:
             print(f"  Search failed for {query!r}: {error}", file=sys.stderr)
             continue
-        for video in videos:
-            # A search page may contain an individually bot-blocked, deleted,
-            # private, or age-restricted video. Do not abandon the whole chart
-            # search because one result cannot expose its metadata.
+        for vr in renderers:
             try:
-                video_id = video.video_id
-                if video_id in seen:
+                video_id = vr.get("videoId", "")
+                if not video_id or video_id in seen:
                     continue
-                title = video.title
+                title_obj = vr.get("title", {})
+                if isinstance(title_obj, dict):
+                    runs = title_obj.get("runs")
+                    title = runs[0]["text"] if runs else title_obj.get("simpleText", "")
+                else:
+                    title = str(title_obj)
+                if not title:
+                    continue
+                length_text = vr.get("lengthText", {})
+                if isinstance(length_text, dict):
+                    length_text = length_text.get("simpleText", "")
+                length_seconds = _parse_length_seconds(length_text)
                 candidate = {
                     "id": video_id,
-                    "url": video.watch_url,
+                    "url": f"https://www.youtube.com/watch?v={video_id}",
                     "title": title,
-                    "length_seconds": video.length,
+                    "length_seconds": length_seconds,
                     "score": score_result(title, chart),
                     "version": chart_video_version(title),
                 }
             except Exception as error:
-                print(f"  Skipping unavailable result: {error}", file=sys.stderr)
+                print(f"  Skipping result: {error}", file=sys.stderr)
                 continue
             seen.add(video_id)
             candidates.append(candidate)
@@ -182,7 +226,7 @@ def download_one(item: dict[str, Any], number: int, destination: Path, maximum_h
         print(f"[{number:02}] Already exists: {output.name}")
         return
     print(f"[{number:02}] Downloading: {selected['title']}")
-    yt = YouTube(selected["url"])
+    yt = YouTube(selected["url"], client="ANDROID_VR")
     video = choose_video_stream(yt, maximum_height)
     audio = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
     if not video or not audio:
