@@ -19,6 +19,7 @@ TOOLS = ROOT / "tools"
 METADATA = DATA / "chuni_fusion_data.json"
 DEFAULT_JACKET = DATA / "default_jacket.png"
 FFMPEG = TOOLS / "ffmpeg.exe"
+YTDLP = TOOLS / "yt-dlp.exe"
 
 # The portable Windows runtime provides Pillow, requests, and pytubefix.
 RUNTIME = ROOT / "runtime"
@@ -41,3 +42,10 @@ def ffmpeg_path() -> str | None:
     if FFMPEG.exists():
         return str(FFMPEG)
     return shutil.which("ffmpeg")
+
+
+def ytdlp_path() -> str | None:
+    """Prefer b50-gen's bundled yt-dlp and fall back to PATH."""
+    if YTDLP.exists():
+        return str(YTDLP)
+    return shutil.which("yt-dlp")

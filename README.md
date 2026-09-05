@@ -23,6 +23,8 @@ The bundled Windows runtime in releases contains the Python packages b50-gen nee
 
 The local `tools/ffmpeg.exe` is used on Windows. Note that when cloning this is zipped due to size limits. On macOS and Linux, b50-gen uses `ffmpeg` from `PATH`.
 
+`tools/yt-dlp.exe` is used for video downloads on Windows. On macOS and Linux, b50-gen uses `yt-dlp` from `PATH` — install it with `pip install yt-dlp` or your package manager.
+
 For the rest of this README, use either launcher:
 
 ```text
@@ -161,7 +163,7 @@ Entries can be plain strings or objects with `comment`, `clip_start`, `clip_end`
 
 ```text
 b50.py                 Unified command entry point
-b50lib/paths.py        Local assets, runtime discovery, ffmpeg lookup
+b50lib/paths.py        Local assets, runtime discovery, ffmpeg/yt-dlp lookup
 b50lib/data.py         B50 input, metadata, jackets, comments, rating logic
 b50lib/concat.py       Ordered fast concat, xfade, hardware encoder detection
 b50_downloader.py      Video search/download implementation
@@ -169,6 +171,7 @@ render_b50_cards.py    Card, clip, and final-video workflow implementation
 data/                  Renderer assets, metadata, fonts, fallback jacket
 user/data.json         Default B50 input export
 tools/ffmpeg.exe       Windows-local encoder; POSIX uses ffmpeg from PATH
+tools/yt-dlp.exe       Windows-local downloader; POSIX uses yt-dlp from PATH
 ```
 
 The B50 JSON export defaults to `user/data.json`. Pass `--data path/to/export.json` to either workflow to use a different export.

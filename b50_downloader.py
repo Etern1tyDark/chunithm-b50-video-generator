@@ -19,13 +19,13 @@ PACKAGE_ROOT = Path(__file__).resolve().parent
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
-from b50lib.paths import ROOT, USER_DATA, enable_runtime_packages, ffmpeg_path as local_ffmpeg_path
+from b50lib.paths import ROOT, USER_DATA, enable_runtime_packages, ffmpeg_path as local_ffmpeg_path, ytdlp_path as local_ytdlp_path
 from b50lib.data import load_charts as load_b50_charts
 
 enable_runtime_packages()
 
 try:
-    from pytubefix import Search, YouTube
+    from pytubefix import Search
 except ImportError as error:
     raise SystemExit(
         "pytubefix is unavailable. Run b50-gen\\start.bat, or install it with "
@@ -189,31 +189,8 @@ def ffmpeg_path() -> str | None:
     return local_ffmpeg_path()
 
 
-def choose_video_stream(yt: YouTube, maximum_height: int, preferred_fps: int = 60):
-    """Prefer 1080p60 (or the requested height/FPS), then degrade gracefully."""
-    streams = list(yt.streams.filter(adaptive=True, only_video=True, file_extension="mp4"))
-    if not streams:
-        return None
-
-    def height(stream) -> int:
-        match = re.match(r"(\d+)", str(stream.resolution or ""))
-        return int(match.group(1)) if match else 0
-
-    def fps(stream) -> int:
-        return int(stream.fps or 0)
-
-    # Exact target first: 1080p60 by default.
-    exact = [stream for stream in streams if height(stream) == maximum_height and fps(stream) >= preferred_fps]
-    if exact:
-        return max(exact, key=fps)
-
-    # Prefer the requested height even if only 30 fps exists, then the highest
-    # available resolution at or below it. HFR wins ties.
-    at_target = [stream for stream in streams if height(stream) == maximum_height]
-    if at_target:
-        return max(at_target, key=fps)
-    below_target = [stream for stream in streams if height(stream) <= maximum_height]
-    return max(below_target or streams, key=lambda stream: (height(stream), fps(stream)))
+def ytdlp_path() -> str | None:
+    return local_ytdlp_path()
 
 
 def download_one(item: dict[str, Any], number: int, destination: Path, maximum_height: int) -> None:
@@ -226,23 +203,23 @@ def download_one(item: dict[str, Any], number: int, destination: Path, maximum_h
         print(f"[{number:02}] Already exists: {output.name}")
         return
     print(f"[{number:02}] Downloading: {selected['title']}")
-    yt = YouTube(selected["url"], client="ANDROID_VR")
-    video = choose_video_stream(yt, maximum_height)
-    audio = yt.streams.filter(only_audio=True).order_by("abr").desc().first()
-    if not video or not audio:
-        raise RuntimeError("No compatible adaptive MP4 video/audio streams found")
-    ffmpeg = ffmpeg_path()
-    if not ffmpeg:
-        raise RuntimeError("Adaptive streams require ffmpeg, but ffmpeg.exe was not found")
-    temp_video = destination / f".{number:02}_video.mp4"
-    temp_audio = destination / f".{number:02}_audio.mp4"
-    try:
-        video.download(output_path=str(destination), filename=temp_video.name)
-        audio.download(output_path=str(destination), filename=temp_audio.name)
-        subprocess.run([ffmpeg, "-y", "-i", str(temp_video), "-i", str(temp_audio), "-c", "copy", str(output)], check=True)
-    finally:
-        temp_video.unlink(missing_ok=True)
-        temp_audio.unlink(missing_ok=True)
+    ytdlp = ytdlp_path()
+    if not ytdlp:
+        raise RuntimeError("yt-dlp not found. Place yt-dlp.exe in tools/ or install it on PATH.")
+    # yt-dlp handles adaptive stream selection and muxing internally.
+    # -f: prefer up to max_height MP4 video + best audio, mux to MP4.
+    format_spec = f"bestvideo[height<={maximum_height}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={maximum_height}]+bestaudio/best[height<={maximum_height}]"
+    subprocess.run(
+        [
+            ytdlp,
+            "--no-playlist",
+            "-f", format_spec,
+            "--merge-output-format", "mp4",
+            "-o", str(output),
+            selected["url"],
+        ],
+        check=True,
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
